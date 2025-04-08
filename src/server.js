@@ -415,6 +415,33 @@ app.post('/upload-video', uploadVideo.single('video'), (req, res) => {
   }
 });
 
+// Endpoint untuk rename video
+app.post('/rename-video', (req, res) => {
+    const { oldName, newName } = req.body;
+    if (!oldName || !newName) {
+        return sendError(res, 'Nama file lama dan baru diperlukan');
+    }
+
+    const oldPath = path.join(__dirname, 'uploads', oldName);
+    const newPath = path.join(__dirname, 'uploads', newName);
+
+    if (!fs.existsSync(oldPath)) {
+        return sendError(res, 'File tidak ditemukan');
+    }
+
+    if (fs.existsSync(newPath)) {
+        return sendError(res, 'File dengan nama tersebut sudah ada');
+    }
+
+    fs.rename(oldPath, newPath, (err) => {
+        if (err) {
+            console.error('Error renaming file:', err);
+            return sendError(res, 'Gagal mengubah nama file');
+        }
+        res.json({ message: 'File berhasil diubah namanya' });
+    });
+});
+
 app.post('/delete-video', (req, res) => {
   const { filePath } = req.body;
   if (!filePath) return sendError(res, 'File path diperlukan');
@@ -509,7 +536,7 @@ app.get('/api/videos', requireAuthAPI, async (req, res) => {
     const allFiles = fs.readdirSync(uploadsDir)
       .filter(file => {
         const isVideoFile = ['.mp4', '.mkv', '.avi'].includes(path.extname(file).toLowerCase());
-        const isNotStreamingFile = !file.startsWith('streamflow_videodata_');
+        const isNotStreamingFile = !file.startsWith('streamdeck_videodata_');
         return isVideoFile && isNotStreamingFile;
       });
 
@@ -580,7 +607,7 @@ app.get('/api/videos-all', requireAuthAPI, async (req, res) => {
       files
         .filter(file => {
           const isVideoFile = file.match(/\.(mp4|mkv|avi|mov|wmv)$/i);
-          const isNotStreamingFile = !file.startsWith('streamflow_videodata_');
+          const isNotStreamingFile = !file.startsWith('streamdeck_videodata_');
           return isVideoFile && isNotStreamingFile;
         })
         .map(async (file) => {
@@ -720,21 +747,7 @@ app.post('/start-stream', async (req, res) => {
       .inputFormat('mp4')
       .inputOptions(['-re', ...(loop === 'true' ? ['-stream_loop -1'] : [])])
       .outputOptions([
-        `-r ${fps || 30}`,
-        '-threads 2',
-        '-x264-params "nal-hrd=cbr"',
-        '-c:v libx264',
-        '-preset veryfast',
-        '-tune zerolatency',
-        `-b:v ${bitrate}k`,
-        `-maxrate ${bitrate}k`,
-        `-bufsize ${bitrate * 2}k`,
-        '-pix_fmt yuv420p',
-        '-g 60',
-        `-vf scale=${resolution}`,
-        '-c:a aac',
-        '-b:a 128k',
-        '-ar 44100',
+        '-c copy',
         '-f flv'
       ])
       .output(`${rtmp_url}/${stream_key}`);
@@ -1034,7 +1047,7 @@ const deleteFile = (filePath) => {
   });
 };
 
-const generateRandomFileName = () => `streamflow_videodata_${crypto.randomBytes(16).toString('hex')}`;
+const generateRandomFileName = () => `streamdeck_videodata_${crypto.randomBytes(16).toString('hex')}`;
 const ifaces = os.networkInterfaces();
 let ipAddress = 'localhost';
 for (const iface of Object.values(ifaces)) {
@@ -1166,17 +1179,7 @@ function scheduleStream(streamData, startTime, duration) {
         .inputFormat('mp4')
         .inputOptions(['-re', ...(streamData.loop === 'true' ? ['-stream_loop -1'] : [])])
         .outputOptions([
-          `-r ${streamData.fps || 30}`,
-          '-threads 2',
-          `-b:v ${streamData.bitrate || 3000}k`,
-          `-s ${streamData.resolution || '1920x1080'}`,
-          '-preset veryfast',
-          '-g 50',
-          '-sc_threshold 0',
-          '-minrate:v 0',
-          '-maxrate:v 4000k',
-          '-bufsize:v 8000k',
-          '-pix_fmt yuv420p',
+          '-c copy',
           '-f flv'
         ])
         .output(`${streamData.rtmp_url}/${streamData.stream_key}`);
@@ -1459,6 +1462,6 @@ app.get('/api/drive-progress/:fileId', requireAuthAPI, (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`\x1b[32mStreamFlow berjalan\x1b[0m\nAkses aplikasi di \x1b[34mhttp://${ipAddress}:${PORT}\x1b[0m`);
+  console.log(`\x1b[32mStream Deck berjalan\x1b[0m\nAkses aplikasi di \x1b[34mhttp://${ipAddress}:${PORT}\x1b[0m`);
   loadScheduledStreams();
 });
